@@ -37,9 +37,25 @@ function main() {
   program.a_TextureCoord = gl.getAttribLocation(program, 'a_TextureCoord');
   program.u_MvpMatrix = gl.getUniformLocation(program, 'u_MvpMatrix');
   program.u_NormalMatrix = gl.getUniformLocation(program, 'u_NormalMatrix');
+  program.dirLightSourceDirection = gl.getUniformLocation(program, 'dirLightSourceDirection');
+  program.dirDiffuseLightIntensity = gl.getUniformLocation(program, 'dirDiffuseLightIntensity');
+  program.dirSpecularLightIntensity = gl.getUniformLocation(program, 'dirSpecularLightIntensity');
+  program.dirAmbientLightIntensity = gl.getUniformLocation(program, 'dirAmbientLightIntensity');
+  program.dirLightSourceDirection2 = gl.getUniformLocation(program, 'dirLightSourceDirection2');
+  program.dirDiffuseLightIntensity2 = gl.getUniformLocation(program, 'dirDiffuseLightIntensity2');
+  program.dirSpecularLightIntensity2 = gl.getUniformLocation(program, 'dirSpecularLightIntensity2');
+  program.dirAmbientLightIntensity2 = gl.getUniformLocation(program, 'dirAmbientLightIntensity2');
+  program.Kambient = gl.getUniformLocation(program, 'Kambient');
+  program.Kdiffuse = gl.getUniformLocation(program, 'Kdiffuse');
+  program.Kspecular = gl.getUniformLocation(program, 'Kspecular');
+  program.shininess = gl.getUniformLocation(program, 'shininess');
 
   if (program.a_Position < 0 ||  program.a_Normal < 0 || program.a_TextureCoord < 0 ||
-    !program.u_MvpMatrix || !program.u_NormalMatrix) {
+    !program.u_MvpMatrix || !program.u_NormalMatrix ||
+    program.dirLightSourceDirection < 0 || program.dirDiffuseLightIntensity < 0 ||
+    program.dirSpecularLightIntensity < 0 || program.dirAmbientLightIntensity < 0 ||
+    program.Kambient < 0 || program.Kdiffuse < 0 || program.Kspecular < 0 || program.shininess < 0
+  ) {
     console.log('attribute, uniform');
     return;
   }
@@ -51,9 +67,8 @@ function main() {
     return;
   }
 
-
   var viewProjMatrix = new Matrix4();
-  viewProjMatrix.setPerspective(30.0, canvas.width/canvas.height, 1.0, 15000.0);
+  viewProjMatrix.setPerspective(45.0, canvas.width/canvas.height, 1.0, 15000.0);
   viewProjMatrix.lookAt(0.0, -500.0, 4000.0, 0.0, -500.0, 0.0, 0.0, 1.0, 0.0);
 
   // Start reading the OBJ file
@@ -124,22 +139,17 @@ function handleTextureLoaded(gl, image, texture) {
   gl.bindTexture(gl.TEXTURE_2D, null);
 }
 
+var g_objDoc = null;      // The information of OBJ file
+var g_drawingInfo = null; // The information for drawing 3D model
 
 // Read a file
 function readOBJFile(fileName, gl, model, scale, reverse) {
-  var request = new XMLHttpRequest();
-
-  request.onreadystatechange = function() {
-    if (request.readyState === 4 && request.status !== 404) {
-      onReadOBJFile(request.responseText, fileName, gl, model, scale, reverse);
-    }
-  }
-  request.open('GET', fileName, true); // Create a request to acquire the file
-  request.send();                      // Send the request
+  var objFileContent = $.ajax({
+      url: fileName,
+      async: false
+    }).responseText;
+  onReadOBJFile(objFileContent, fileName, gl, model, scale, reverse);
 }
-
-var g_objDoc = null;      // The information of OBJ file
-var g_drawingInfo = null; // The information for drawing 3D model
 
 // OBJ File has been read
 function onReadOBJFile(fileString, fileName, gl, o, scale, reverse) {
@@ -158,7 +168,7 @@ var g_modelMatrix = new Matrix4();
 var g_mvpMatrix = new Matrix4();
 var g_normalMatrix = new Matrix4();
 
-// æç”»é–¢æ•°
+
 function draw(gl, program, angle, viewProjMatrix, model, objTexture) {
   if (g_objDoc != null && g_objDoc.isMTLComplete()){ // OBJ and all MTLs are available
     g_drawingInfo = onReadComplete(gl, model, g_objDoc);
@@ -168,9 +178,11 @@ function draw(gl, program, angle, viewProjMatrix, model, objTexture) {
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);  // Clear color and depth buffers
 
+
   g_modelMatrix.setRotate(angle, 1.0, 0.0, 0.0);
   g_modelMatrix.rotate(angle, 0.0, 1.0, 0.0);
   g_modelMatrix.rotate(angle, 0.0, 0.0, 1.0);
+
 
   // Calculate the normal transformation matrix and pass it to u_NormalMatrix
   g_normalMatrix.setInverseOf(g_modelMatrix);
@@ -181,6 +193,25 @@ function draw(gl, program, angle, viewProjMatrix, model, objTexture) {
   g_mvpMatrix.set(viewProjMatrix);
   g_mvpMatrix.multiply(g_modelMatrix);
   gl.uniformMatrix4fv(program.u_MvpMatrix, false, g_mvpMatrix.elements);
+
+  // surface material
+  var mat = g_drawingInfo.mat;
+  gl.uniform4f(program.Kambient, mat.Ka[0], mat.Ka[1], mat.Ka[2], mat.Ka[3]);
+  gl.uniform4f(program.Kdiffuse,  mat.Kd[0], mat.Kd[1], mat.Kd[2], mat.Kd[3]);
+  gl.uniform4f(program.Kspecular, mat.Ks[0], mat.Ks[1], mat.Ks[2], mat.Ks[3]);
+  gl.uniform1f(program.shininess, mat.s);
+
+// directed light 1 red
+  gl.uniform4f(program.dirAmbientLightIntensity, 0.1, 0.1, 0.1, 1.0);
+  gl.uniform4f(program.dirDiffuseLightIntensity, 0.2, 0.2, 0.2, 1.0);
+  gl.uniform4f(program.dirSpecularLightIntensity, 0.7, 0.0, 0.0, 1.0);
+  gl.uniform4f(program.dirLightSourceDirection, 0.0, 0.5, 1.0, 0.0);
+
+  // directed light 2 blue
+  gl.uniform4f(program.dirAmbientLightIntensity2, 0.1, 0.1, 0.1, 1.0);
+  gl.uniform4f(program.dirDiffuseLightIntensity2, 0.2, 0.2, 0.2, 1.0);
+  gl.uniform4f(program.dirSpecularLightIntensity2, 0.0, 0.0, 0.7, 1.0);
+  gl.uniform4f(program.dirLightSourceDirection2, 0.0, -0.4, 1.0, 0.0);
 
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, objTexture);
@@ -194,6 +225,7 @@ function draw(gl, program, angle, viewProjMatrix, model, objTexture) {
 function onReadComplete(gl, model, objDoc) {
   // Acquire the vertex coordinates and colors from OBJ file
   var drawingInfo = objDoc.getDrawingInfo();
+  drawingInfo.mat = objDoc.mtls[0].materials[0];
 
   // Write date into the buffer object
   gl.bindBuffer(gl.ARRAY_BUFFER, model.vertexBuffer);
@@ -263,18 +295,11 @@ OBJDoc.prototype.parse = function(fileString, scale, reverse) {
         var path = this.parseMtllib(sp, this.fileName);
         var mtl = new MTLDoc();   // Create MTL instance
         this.mtls.push(mtl);
-        var request = new XMLHttpRequest();
-        request.onreadystatechange = function() {
-          if (request.readyState == 4) {
-            if (request.status != 404) {
-              onReadMTLFile(request.responseText, mtl);
-            }else{
-              mtl.complete = true;
-            }
-          }
-        }
-        request.open('GET', path, true);  // Create a request to acquire the file
-        request.send();                   // Send the request
+        var mtlContent = $.ajax({
+          url: path,
+          async: false
+        }).responseText;
+        onReadMTLFile(mtlContent, mtl);
         continue; // Go to the next line
       case 'o':
       case 'g':   // Read Object name
@@ -442,14 +467,37 @@ function onReadMTLFile(fileString, mtl) {
       case '#':
         continue;    // Skip comments
       case 'newmtl': // Read Material chunk
-        name = mtl.parseNewmtl(sp);    // Get name
+        name = mtl.parseNewmtl(sp); // Get name
+        var Kd = null;
+        var Ka = null;
+        var Ks = null;
+        var s = -1.0;
         continue; // Go to the next line
       case 'Kd':   // Read normal
         if(name == "") continue; // Go to the next line because of Error
-        var material = mtl.parseRGB(sp, name);
-        mtl.materials.push(material);
-        name = "";
+        Kd  = mtl.parseK(sp);
         continue; // Go to the next line
+      case 'Ka':
+        if(name == "") continue; // Go to the next line because of Error
+        Ka  = mtl.parseK(sp);
+        continue; // Go to the next line
+      case 'Ks':
+        if(name == "") continue; // Go to the next line because of Error
+        Ks  = mtl.parseK(sp);
+        continue; // Go to the next line
+      case 'Ns':
+        if(name == "") continue; // Go to the next line because of Error
+        s  = sp.getFloat();
+        continue; // Go to the next line
+    }
+    if (Kd != null && Ks != null && Ka != null && s >= 0) {
+      var m = new Material(name, Ka, Kd, Ks, s);
+      mtl.materials.push(m);
+      name = "";
+      Kd = null;
+      Ka = null;
+      Ks = null;
+      s = -1.0;
     }
   }
   mtl.complete = true;
@@ -462,18 +510,6 @@ OBJDoc.prototype.isMTLComplete = function() {
     if(!this.mtls[i].complete) return false;
   }
   return true;
-}
-
-// Find color by material name
-OBJDoc.prototype.findColor = function(name){
-  for(var i = 0; i < this.mtls.length; i++){
-    for(var j = 0; j < this.mtls[i].materials.length; j++){
-      if(this.mtls[i].materials[j].name == name){
-        return(this.mtls[i].materials[j].color)
-      }
-    }
-  }
-  return(new Color(0.8, 0.8, 0.8, 1));
 }
 
 //------------------------------------------------------------------------------
@@ -496,7 +532,7 @@ OBJDoc.prototype.getDrawingInfo = function() {
     var object = this.objects[i];
     for(var j = 0; j < object.faces.length; j++){
       var face = object.faces[j];
-      var color = this.findColor(face.materialName);
+
       var faceNormal = face.normal;
       for(var k = 0; k < face.vIndices.length; k++){
         // Set index
@@ -544,19 +580,30 @@ MTLDoc.prototype.parseNewmtl = function(sp) {
   return sp.getWord();         // Get name
 }
 
-MTLDoc.prototype.parseRGB = function(sp, name) {
+MTLDoc.prototype.parseRGB = function(sp) {
   var r = sp.getFloat();
   var g = sp.getFloat();
   var b = sp.getFloat();
-  return (new Material(name, r, g, b, 1));
+  return (new Color(r, g, b, 1));
+}
+
+MTLDoc.prototype.parseK = function(sp) {
+  var r = sp.getFloat();
+  var g = sp.getFloat();
+  var b = sp.getFloat();
+  var a = 1.0;
+  return [r, g, b, a];
 }
 
 //------------------------------------------------------------------------------
 // Material Object
 //------------------------------------------------------------------------------
-var Material = function(name, r, g, b, a) {
+var Material = function(name, Ka, Kd, Ks, s) {
   this.name = name;
-  this.color = new Color(r, g, b, a);
+  this.Ka = Ka;
+  this.Kd = Kd;
+  this.Ks = Ks;
+  this.s = s;
 }
 
 //------------------------------------------------------------------------------
